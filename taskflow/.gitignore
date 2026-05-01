@@ -1,0 +1,9 @@
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+backend/taskflow.db
+.env
+.env.local
+frontend/dist/
+*.log
+.DS_Store
