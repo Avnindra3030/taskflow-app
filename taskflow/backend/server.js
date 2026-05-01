@@ -30,36 +30,51 @@ app.get('/api/health', (req, res) => {
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
+  const fs = require('fs');
   const frontendPath = path.join(__dirname, '../frontend/dist');
-  console.log(`📁 Serving frontend from: ${frontendPath}`);
   
-  // Serve static assets
-  app.use(express.static(frontendPath));
+  console.log(`📁 Frontend path: ${frontendPath}`);
+  console.log(`📁 Frontend exists: ${fs.existsSync(frontendPath)}`);
   
-  // SPA fallback - serve index.html for non-API routes
-  app.get('*', (req, res) => {
-    // Skip API routes
-    if (req.path.startsWith('/api')) {
-      return res.status(404).json({ error: 'API endpoint not found' });
-    }
+  if (fs.existsSync(frontendPath)) {
+    // Serve static assets
+    app.use(express.static(frontendPath, { maxAge: '1d' }));
     
-    const indexPath = path.join(frontendPath, 'index.html');
-    res.sendFile(indexPath, (err) => {
-      if (err) {
-        console.error(`❌ Error serving index.html for ${req.path}: ${err.code || err.message}`);
-        res.status(500).json({ error: 'Failed to serve app' });
+    // SPA fallback - for all other routes, serve index.html
+    app.use((req, res) => {
+      // Skip API routes - let them 404
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
       }
+      
+      const indexFile = path.join(frontendPath, 'index.html');
+      console.log(`🔍 Checking for: ${indexFile}`);
+      
+      if (!fs.existsSync(indexFile)) {
+        console.error(`❌ index.html not found at: ${indexFile}`);
+        return res.status(500).json({ error: 'index.html not found' });
+      }
+      
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      const stream = fs.createReadStream(indexFile);
+      stream.pipe(res);
+      stream.on('error', (err) => {
+        console.error(`❌ Error streaming index.html: ${err.message}`);
+        res.status(500).json({ error: 'Failed to serve index.html' });
+      });
     });
+  } else {
+    console.warn('⚠️  Frontend dist not found. API-only mode.');
+    app.get('/', (req, res) => {
+      res.json({ status: 'ok', message: 'TaskFlow API running' });
+    });
+  }
+} else {
+  // Development - just serve health check
+  app.get('/', (req, res) => {
+    res.json({ status: 'ok', message: 'TaskFlow API running' });
   });
 }
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error(`❌ Unhandled error on ${req.method} ${req.path}:`, err.message);
-  res.status(err.status || err.statusCode || 500).json({ 
-    error: err.message || 'Internal server error'
-  });
-});
 
 // Initialize DB then start server
 initDb().then(() => {
