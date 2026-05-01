@@ -30,16 +30,39 @@ app.get('/api/health', (req, res) => {
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
+  const fs = require('fs');
   const frontendPath = path.join(__dirname, '../frontend/dist');
-  app.use(express.static(frontendPath));
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(frontendPath, 'index.html'));
-    }
-  });
+  
+  console.log(`📁 Frontend path: ${frontendPath}`);
+  console.log(`📁 Frontend exists: ${fs.existsSync(frontendPath)}`);
+  
+  if (fs.existsSync(frontendPath)) {
+    app.use(express.static(frontendPath, { 
+      maxAge: '1h',
+      etag: false 
+    }));
+    
+    // SPA fallback
+    app.get('*', (req, res) => {
+      if (!req.path.startsWith('/api') && !req.path.includes('.')) {
+        res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
+          if (err) {
+            console.error(`Error sending index.html: ${err.message}`);
+            res.status(404).json({ error: 'Frontend not found' });
+          }
+        });
+      }
+    });
+  } else {
+    console.warn('⚠️  Frontend dist folder not found. API-only mode.');
+    app.get('/', (req, res) => {
+      res.json({ message: 'TaskFlow API running', version: '1.0.0' });
+    });
+  }
 }
 
 app.use((err, req, res, next) => {
+  console.error(`❌ Error: ${err.message}`);
   console.error(err.stack);
   res.status(500).json({ error: 'Internal server error' });
 });
