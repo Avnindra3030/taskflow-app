@@ -1,14 +1,25 @@
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'taskflow.db');
+// Use temp directory in production for ephemeral storage
+const DB_PATH = process.env.DB_PATH || (
+  process.env.NODE_ENV === 'production' 
+    ? path.join(os.tmpdir(), 'taskflow.db')
+    : path.join(__dirname, 'taskflow.db')
+);
 
 let db = null;
 let SQL = null;
 
 async function initSql() {
   if (!SQL) {
-    SQL = await require('sql.js')();
+    try {
+      SQL = await require('sql.js')();
+    } catch (err) {
+      console.error('Failed to load sql.js:', err.message);
+      throw err;
+    }
   }
   return SQL;
 }
@@ -22,20 +33,26 @@ function saveDb() {
 
 async function getDb() {
   if (db) return db;
-  const SQL = await initSql();
   
-  if (fs.existsSync(DB_PATH)) {
-    const data = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(data);
-  } else {
-    db = new SQL.Database();
-  }
+  try {
+    const SQL = await initSql();
+    
+    if (fs.existsSync(DB_PATH)) {
+      const data = fs.readFileSync(DB_PATH);
+      db = new SQL.Database(data);
+    } else {
+      db = new SQL.Database();
+    }
 
-  // Enable WAL-like settings
-  db.run("PRAGMA foreign_keys = ON");
-  
-  initSchema();
-  return db;
+    // Enable WAL-like settings
+    db.run("PRAGMA foreign_keys = ON");
+    
+    initSchema();
+    return db;
+  } catch (err) {
+    console.error('Database initialization failed:', err);
+    throw err;
+  }
 }
 
 function initSchema() {
@@ -164,7 +181,9 @@ async function getWrappedDb() {
 
 // Synchronous version for middleware (db must already be initialized)
 function getDbSync() {
-  if (!wrappedDb) throw new Error('DB not initialized. Call initDb() first.');
+  if (!wrappedDb) {
+    throw new Error('Database not initialized. Make sure initDb() completed successfully.');
+  }
   return wrappedDb;
 }
 

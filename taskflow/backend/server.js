@@ -49,9 +49,11 @@ initDb().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 TaskFlow server running on port ${PORT}`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`   Database initialized successfully`);
   });
 }).catch(err => {
-  console.error('Failed to initialize database:', err);
+  console.error('❌ Failed to initialize database:', err.message);
+  console.error('Stack:', err.stack);
   process.exit(1);
 });
 
